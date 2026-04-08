@@ -39,48 +39,17 @@ st.markdown(
         padding-top: 2rem;
         max-width: 880px;
     }
-    .app-kicker {
-        color: #0f766e;
-        font-size: 0.84rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        margin-bottom: 0.25rem;
-    }
-    .app-title {
-        color: #111827;
-        font-size: 2rem;
-        font-weight: 800;
-        line-height: 1.2;
-        margin-bottom: 0.35rem;
-    }
-    .app-subtitle {
-        color: #4b5563;
-        font-size: 1rem;
-        line-height: 1.6;
-        margin-bottom: 1rem;
-    }
-    .stButton > button {
-        border-radius: 8px;
-        border-color: #cbd5e1;
-        color: #0f172a;
-        font-weight: 600;
-    }
-    .stButton > button:hover {
-        border-color: #0f766e;
-        color: #0f766e;
+    div[data-testid="stSidebar"] {
+        border-right: 1px solid rgba(148, 163, 184, 0.25);
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.markdown('<div class="app-kicker">Data Agent</div>', unsafe_allow_html=True)
-st.markdown('<div class="app-title">Seu Analista de Dados Autônomo</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="app-subtitle">Faça perguntas em linguagem natural e receba análises com base nos CSVs conectados ao DuckDB.</div>',
-    unsafe_allow_html=True,
-)
+st.caption("DATA AGENT")
+st.title("Seu Analista de Dados Autônomo")
+st.write("Faça perguntas em linguagem natural e receba análises com base nos CSVs conectados ao DuckDB.")
 
 
 @st.cache_resource(show_spinner=False)
@@ -118,7 +87,7 @@ def render_sidebar() -> None:
     """Render operational controls and usage guidance."""
     with st.sidebar:
         st.header("Operação")
-        st.success("Interface online")
+        st.info("Interface online")
         st.caption("Use perguntas objetivas. Para valores de venda, o agente calcula quantidade vezes valor unitário.")
 
         if st.button("Limpar conversa", use_container_width=True):
