@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 import streamlit as st
@@ -14,7 +15,14 @@ if str(PROJECT_ROOT) not in sys.path:
 
 WELCOME_MESSAGE = (
     "Olá! Eu sou seu agente de dados. O banco de dados já está conectado. "
-    "O que você gostaria de saber sobre nossas vendas?"
+    "Você pode me perguntar sobre regiões, vendedores, produtos, volume e faturamento."
+)
+
+SAMPLE_QUESTIONS = (
+    "Quero saber a região que menos vende",
+    "Qual vendedor teve o maior volume total?",
+    "Quem vendeu mais Mouse no Nordeste?",
+    "Qual produto teve maior faturamento?",
 )
 
 
@@ -24,8 +32,55 @@ st.set_page_config(
     layout="centered",
 )
 
-st.title("🤖 Seu Analista de Dados Autônomo")
-st.markdown("Faça perguntas sobre seus dados em linguagem natural.")
+st.markdown(
+    """
+    <style>
+    .main .block-container {
+        padding-top: 2rem;
+        max-width: 880px;
+    }
+    .app-kicker {
+        color: #0f766e;
+        font-size: 0.84rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin-bottom: 0.25rem;
+    }
+    .app-title {
+        color: #111827;
+        font-size: 2rem;
+        font-weight: 800;
+        line-height: 1.2;
+        margin-bottom: 0.35rem;
+    }
+    .app-subtitle {
+        color: #4b5563;
+        font-size: 1rem;
+        line-height: 1.6;
+        margin-bottom: 1rem;
+    }
+    .stButton > button {
+        border-radius: 8px;
+        border-color: #cbd5e1;
+        color: #0f172a;
+        font-weight: 600;
+    }
+    .stButton > button:hover {
+        border-color: #0f766e;
+        color: #0f766e;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown('<div class="app-kicker">Data Agent</div>', unsafe_allow_html=True)
+st.markdown('<div class="app-title">Seu Analista de Dados Autônomo</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="app-subtitle">Faça perguntas em linguagem natural e receba análises com base nos CSVs conectados ao DuckDB.</div>',
+    unsafe_allow_html=True,
+)
 
 
 @st.cache_resource(show_spinner=False)
@@ -39,12 +94,7 @@ def load_agent():
 def ensure_chat_history() -> None:
     """Initialize the chat history for the current browser session."""
     if "messages" not in st.session_state:
-        st.session_state.messages = [
-            {
-                "role": "assistant",
-                "content": WELCOME_MESSAGE,
-            }
-        ]
+        reset_chat_history()
 
 
 def render_chat_history() -> None:
@@ -59,42 +109,104 @@ def append_message(role: str, content: str) -> None:
     st.session_state.messages.append({"role": role, "content": content})
 
 
+def reset_chat_history() -> None:
+    """Reset the chat to its initial assistant message."""
+    st.session_state.messages = [{"role": "assistant", "content": WELCOME_MESSAGE}]
+
+
+def render_sidebar() -> None:
+    """Render operational controls and usage guidance."""
+    with st.sidebar:
+        st.header("Operação")
+        st.success("Interface online")
+        st.caption("Use perguntas objetivas. Para valores de venda, o agente calcula quantidade vezes valor unitário.")
+
+        if st.button("Limpar conversa", use_container_width=True):
+            reset_chat_history()
+            st.rerun()
+
+        if st.button("Recarregar agente", use_container_width=True):
+            st.cache_resource.clear()
+            st.rerun()
+
+        st.divider()
+        st.subheader("Dados conectados")
+        st.write("`data/sample/vendas.csv`")
+        st.caption("Colunas principais: região, vendedor, produto, quantidade e valor unitário.")
+
+
+def render_quick_prompts() -> str | None:
+    """Render prompt shortcuts and return the selected question, if any."""
+    st.caption("Comece por uma pergunta sugerida ou escreva a sua no chat.")
+    columns = st.columns(2)
+
+    for index, question in enumerate(SAMPLE_QUESTIONS):
+        if columns[index % 2].button(question, key=f"prompt_{index}", use_container_width=True):
+            return question
+
+    return None
+
+
+def show_configuration_error(message: str) -> None:
+    """Show setup errors with a clear recovery path."""
+    st.error(message)
+    with st.expander("Como corrigir"):
+        st.markdown(
+            """
+            1. Crie o arquivo `.env` na raiz do projeto.
+            2. Preencha `GROQ_API_KEY` com sua chave da Groq.
+            3. Reinicie a aplicação com `streamlit run src/main.py`.
+            """
+        )
+
+
+render_sidebar()
+
 try:
     agent = load_agent()
 except ModuleNotFoundError as exc:
     if exc.name not in {"src.agent", "src.agent.executor"}:
         raise
 
-    st.error(
+    show_configuration_error(
         "Não encontrei o módulo `src.agent.executor`. "
         "Confirme se a camada de orquestração do agente já foi criada e se ela expõe `get_agent()`."
     )
     st.caption(f"Detalhe técnico: {exc}")
     st.stop()
 except RuntimeError as exc:
-    st.error(str(exc))
+    show_configuration_error(str(exc))
     st.stop()
 
 
 ensure_chat_history()
+selected_question = render_quick_prompts()
+st.divider()
 render_chat_history()
 
 user_question = st.chat_input("Ex: Qual vendedor teve o maior faturamento?")
+submitted_question = user_question or selected_question
 
-if user_question:
+if submitted_question:
     with st.chat_message("user"):
-        st.markdown(user_question)
-    append_message("user", user_question)
+        st.markdown(submitted_question)
+    append_message("user", submitted_question)
 
     with st.chat_message("assistant"):
         with st.spinner("Analisando o banco de dados..."):
+            started_at = time.perf_counter()
             try:
-                raw_response = agent.invoke({"input": user_question})
+                raw_response = agent.invoke({"input": submitted_question})
                 response_text = raw_response["output"]
             except Exception as exc:  # noqa: BLE001 - Streamlit should show user-friendly failures.
-                response_text = f"Desculpe, encontrei um erro ao processar os dados: {exc}"
+                response_text = (
+                    "Não consegui concluir essa análise agora. "
+                    "Tente reformular a pergunta ou recarregar o agente pela barra lateral.\n\n"
+                    f"Detalhe técnico: {exc}"
+                )
                 st.error(response_text)
             else:
                 st.markdown(response_text)
+                st.caption(f"Respondido em {time.perf_counter() - started_at:.1f}s")
 
     append_message("assistant", response_text)

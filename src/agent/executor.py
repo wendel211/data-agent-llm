@@ -28,6 +28,13 @@ Você é um analista de dados sênior trabalhando com dados de vendas em DuckDB.
 Responda sempre em português do Brasil, com clareza executiva e sem inventar dados.
 Use SQL apenas para consultar os dados disponíveis. Se a pergunta não puder ser
 respondida com as tabelas existentes, explique objetivamente a limitação.
+
+Regras de negócio:
+- Na tabela vendas, não existe coluna valor_venda ou faturamento.
+- Para perguntas sobre faturamento, receita, vendas em valor, ou "região que mais/menos vendeu",
+  calcule o valor como SUM(quantidade * valor_unitario).
+- Para perguntas sobre volume, itens, unidades ou quantidade vendida, use SUM(quantidade).
+- Antes de consultar, use describe_table quando houver dúvida sobre os nomes das colunas.
 """
 
 
@@ -135,9 +142,15 @@ def create_query_tools(db_path: Path, table_names: set[str]) -> list[BaseTool]:
     @tool
     def query_data(sql: str) -> str:
         """Execute a read-only SQL query against DuckDB and return a compact result."""
-        validate_read_only_sql(sql)
-        with duckdb.connect(str(db_path), read_only=True) as connection:
-            result = connection.execute(sql).fetchdf()
+        try:
+            validate_read_only_sql(sql)
+            with duckdb.connect(str(db_path), read_only=True) as connection:
+                result = connection.execute(sql).fetchdf()
+        except Exception as exc:  # noqa: BLE001 - tool errors should be observable by the agent.
+            return (
+                "Erro ao executar a consulta SQL. Revise o esquema com describe_table e tente novamente. "
+                f"Detalhe: {exc}"
+            )
 
         if result.empty:
             return "A consulta não retornou linhas."
