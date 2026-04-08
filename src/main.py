@@ -71,6 +71,9 @@ except ModuleNotFoundError as exc:
     )
     st.caption(f"Detalhe técnico: {exc}")
     st.stop()
+except RuntimeError as exc:
+    st.error(str(exc))
+    st.stop()
 
 
 ensure_chat_history()
