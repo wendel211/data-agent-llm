@@ -1,0 +1,9 @@
+pedido_id,data,regiao,vendedor,produto,quantidade,valor_unitario
+1,2026-01-05,Nordeste,Beatriz,Mouse,12,89.90
+2,2026-01-07,Nordeste,Carlos,Mouse,8,91.50
+3,2026-01-10,Sudeste,Ana,Teclado,15,149.90
+4,2026-01-12,Sul,Diego,Monitor,4,899.00
+5,2026-01-14,Nordeste,Beatriz,Mouse,8,87.90
+6,2026-01-16,Centro-Oeste,Ana,Headset,9,219.90
+7,2026-01-18,Norte,Carlos,Mouse,6,94.00
+8,2026-01-20,Sudeste,Beatriz,Monitor,3,879.00
