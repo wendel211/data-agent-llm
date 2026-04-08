@@ -1,0 +1,16 @@
+# Ambientes Virtuais
+venv/
+env/
+.venv/
+
+# Variáveis de Ambiente (NUNCA subir para o GitHub)
+.env
+
+# Arquivos de Cache do Python e DuckDB
+__pycache__/
+*.pyc
+*.db
+*.db.wal
+
+# Dados brutos (opcional, mas recomendado se forem arquivos muito grandes)
+data/raw/*.csv
