@@ -1,5 +1,6 @@
-streamlit>=1.33,<2.0
 langchain>=1,<2
 langchain-groq>=1,<2
 duckdb>=1.4,<2
 python-dotenv>=1,<2
+fastapi>=0.115,<1.0
+uvicorn>=0.32,<1.0

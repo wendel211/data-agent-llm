@@ -15,7 +15,7 @@ from langchain_groq import ChatGroq
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_DUCKDB_PATH = PROJECT_ROOT / "data_agent.duckdb"
+RUNTIME_DB_DIR = PROJECT_ROOT / ".runtime"
 CSV_PATTERNS = (
     "data/*.csv",
     "data/raw/*.csv",
@@ -76,7 +76,8 @@ def get_agent():
         )
 
     table_names = build_table_names(csv_files)
-    build_duckdb_database(csv_files, table_names)
+    db_path = get_runtime_duckdb_path()
+    build_duckdb_database(csv_files, table_names, db_path)
     llm = ChatGroq(
         model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
         api_key=api_key,
@@ -84,7 +85,7 @@ def get_agent():
     )
     graph = create_agent(
         model=llm,
-        tools=create_query_tools(DEFAULT_DUCKDB_PATH, set(table_names.values())),
+        tools=create_query_tools(db_path, set(table_names.values())),
         system_prompt=build_system_prompt(table_names),
         debug=os.getenv("LANGCHAIN_VERBOSE", "").lower() == "true",
     )
@@ -101,9 +102,15 @@ def discover_csv_files(project_root: Path) -> list[Path]:
     return sorted({file.resolve() for file in files if file.is_file()})
 
 
-def build_duckdb_database(csv_files: list[Path], table_names: dict[Path, str]) -> None:
+def get_runtime_duckdb_path() -> Path:
+    """Create a process-specific DuckDB path to avoid file lock conflicts."""
+    RUNTIME_DB_DIR.mkdir(parents=True, exist_ok=True)
+    return RUNTIME_DB_DIR / f"data_agent_{os.getpid()}.duckdb"
+
+
+def build_duckdb_database(csv_files: list[Path], table_names: dict[Path, str], db_path: Path) -> None:
     """Create DuckDB tables from the discovered CSV files."""
-    with duckdb.connect(str(DEFAULT_DUCKDB_PATH)) as connection:
+    with duckdb.connect(str(db_path)) as connection:
         for csv_file in csv_files:
             table_name = table_names[csv_file]
             drop_relation(connection, table_name)

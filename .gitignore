@@ -16,3 +16,8 @@ __pycache__/
 
 # Dados brutos (opcional, mas recomendado se forem arquivos muito grandes)
 data/raw/*.csv
+
+# Frontend React
+frontend/node_modules/
+frontend/dist/
+.runtime/
