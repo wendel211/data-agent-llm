@@ -1,212 +1,80 @@
-"""Streamlit chat interface for the autonomous data agent."""
+"""FastAPI backend for the React-based data agent frontend."""
 
 from __future__ import annotations
 
-import sys
-import time
+from functools import lru_cache
 from pathlib import Path
 
-import streamlit as st
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+from src.agent.executor import DataAgentConfigurationError, get_agent
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
-WELCOME_MESSAGE = (
-    "Olá! Eu sou seu agente de dados. O banco de dados já está conectado. "
-    "Você pode me perguntar sobre regiões, vendedores, produtos, volume e faturamento."
+app = FastAPI(
+    title="Data Agent API",
+    version="0.1.0",
+    description="HTTP API for querying local sales data through the LLM agent.",
 )
 
-SAMPLE_QUESTIONS = (
-    "Quero saber a região que menos vende",
-    "Qual vendedor teve o maior volume total?",
-    "Quem vendeu mais Mouse no Nordeste?",
-    "Qual produto teve maior faturamento?",
-)
-
-
-st.set_page_config(
-    page_title="Data Agent Sênior",
-    page_icon="🤖",
-    layout="centered",
-)
-
-st.markdown(
-    """
-    <style>
-    .main .block-container {
-        padding-top: 2rem;
-        max-width: 880px;
-    }
-    .app-kicker {
-        color: #0f766e;
-        font-size: 0.84rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        margin-bottom: 0.25rem;
-    }
-    .app-title {
-        color: #111827;
-        font-size: 2rem;
-        font-weight: 800;
-        line-height: 1.2;
-        margin-bottom: 0.35rem;
-    }
-    .app-subtitle {
-        color: #4b5563;
-        font-size: 1rem;
-        line-height: 1.6;
-        margin-bottom: 1rem;
-    }
-    .stButton > button {
-        border-radius: 8px;
-        border-color: #cbd5e1;
-        color: #0f172a;
-        font-weight: 600;
-    }
-    .stButton > button:hover {
-        border-color: #0f766e;
-        color: #0f766e;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-st.markdown('<div class="app-kicker">Data Agent</div>', unsafe_allow_html=True)
-st.markdown('<div class="app-title">Seu Analista de Dados Autônomo</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="app-subtitle">Faça perguntas em linguagem natural e receba análises com base nos CSVs conectados ao DuckDB.</div>',
-    unsafe_allow_html=True,
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-@st.cache_resource(show_spinner=False)
+class ChatRequest(BaseModel):
+    """Payload accepted by the chat endpoint."""
+
+    message: str = Field(..., min_length=1, description="Natural language question for the data agent.")
+
+
+class ChatResponse(BaseModel):
+    """Response returned by the chat endpoint."""
+
+    answer: str
+
+
+class HealthResponse(BaseModel):
+    """Lightweight service status payload."""
+
+    status: str
+    datasets_path: str
+
+
+@lru_cache(maxsize=1)
 def load_agent():
-    """Load the LangChain agent once per Streamlit process."""
-    from src.agent.executor import get_agent
-
+    """Initialize the LangChain agent once per process."""
     return get_agent()
 
 
-def ensure_chat_history() -> None:
-    """Initialize the chat history for the current browser session."""
-    if "messages" not in st.session_state:
-        reset_chat_history()
+@app.get("/api/health", response_model=HealthResponse)
+def healthcheck() -> HealthResponse:
+    """Expose a lightweight health endpoint for local frontend checks."""
+    return HealthResponse(status="ok", datasets_path=str(PROJECT_ROOT / "data"))
 
 
-def render_chat_history() -> None:
-    """Render all messages already stored in session state."""
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+@app.post("/api/chat", response_model=ChatResponse)
+def chat(payload: ChatRequest) -> ChatResponse:
+    """Handle a user question and return the agent answer."""
+    try:
+        agent = load_agent()
+        response = agent.invoke({"input": payload.message})
+    except DataAgentConfigurationError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - API must wrap unexpected agent failures.
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Nao consegui concluir essa analise agora. "
+                f"Detalhe tecnico: {exc}"
+            ),
+        ) from exc
 
-
-def append_message(role: str, content: str) -> None:
-    """Persist and render a chat message in the active session."""
-    st.session_state.messages.append({"role": role, "content": content})
-
-
-def reset_chat_history() -> None:
-    """Reset the chat to its initial assistant message."""
-    st.session_state.messages = [{"role": "assistant", "content": WELCOME_MESSAGE}]
-
-
-def render_sidebar() -> None:
-    """Render operational controls and usage guidance."""
-    with st.sidebar:
-        st.header("Operação")
-        st.success("Interface online")
-        st.caption("Use perguntas objetivas. Para valores de venda, o agente calcula quantidade vezes valor unitário.")
-
-        if st.button("Limpar conversa", use_container_width=True):
-            reset_chat_history()
-            st.rerun()
-
-        if st.button("Recarregar agente", use_container_width=True):
-            st.cache_resource.clear()
-            st.rerun()
-
-        st.divider()
-        st.subheader("Dados conectados")
-        st.write("`data/sample/vendas.csv`")
-        st.caption("Colunas principais: região, vendedor, produto, quantidade e valor unitário.")
-
-
-def render_quick_prompts() -> str | None:
-    """Render prompt shortcuts and return the selected question, if any."""
-    st.caption("Comece por uma pergunta sugerida ou escreva a sua no chat.")
-    columns = st.columns(2)
-
-    for index, question in enumerate(SAMPLE_QUESTIONS):
-        if columns[index % 2].button(question, key=f"prompt_{index}", use_container_width=True):
-            return question
-
-    return None
-
-
-def show_configuration_error(message: str) -> None:
-    """Show setup errors with a clear recovery path."""
-    st.error(message)
-    with st.expander("Como corrigir"):
-        st.markdown(
-            """
-            1. Crie o arquivo `.env` na raiz do projeto.
-            2. Preencha `GROQ_API_KEY` com sua chave da Groq.
-            3. Reinicie a aplicação com `streamlit run src/main.py`.
-            """
-        )
-
-
-render_sidebar()
-
-try:
-    agent = load_agent()
-except ModuleNotFoundError as exc:
-    if exc.name not in {"src.agent", "src.agent.executor"}:
-        raise
-
-    show_configuration_error(
-        "Não encontrei o módulo `src.agent.executor`. "
-        "Confirme se a camada de orquestração do agente já foi criada e se ela expõe `get_agent()`."
-    )
-    st.caption(f"Detalhe técnico: {exc}")
-    st.stop()
-except RuntimeError as exc:
-    show_configuration_error(str(exc))
-    st.stop()
-
-
-ensure_chat_history()
-selected_question = render_quick_prompts()
-st.divider()
-render_chat_history()
-
-user_question = st.chat_input("Ex: Qual vendedor teve o maior faturamento?")
-submitted_question = user_question or selected_question
-
-if submitted_question:
-    with st.chat_message("user"):
-        st.markdown(submitted_question)
-    append_message("user", submitted_question)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Analisando o banco de dados..."):
-            started_at = time.perf_counter()
-            try:
-                raw_response = agent.invoke({"input": submitted_question})
-                response_text = raw_response["output"]
-            except Exception as exc:  # noqa: BLE001 - Streamlit should show user-friendly failures.
-                response_text = (
-                    "Não consegui concluir essa análise agora. "
-                    "Tente reformular a pergunta ou recarregar o agente pela barra lateral.\n\n"
-                    f"Detalhe técnico: {exc}"
-                )
-                st.error(response_text)
-            else:
-                st.markdown(response_text)
-                st.caption(f"Respondido em {time.perf_counter() - started_at:.1f}s")
-
-    append_message("assistant", response_text)
+    return ChatResponse(answer=response["output"])

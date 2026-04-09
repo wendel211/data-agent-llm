@@ -1,15 +1,23 @@
 # Como testar localmente
 
-## 1. Instalar dependências
+## 1. Instalar dependencias do backend
 
 ```powershell
 .\venv\Scripts\activate
 python -m pip install -r requirements.txt
 ```
 
-## 2. Configurar a chave da Groq
+## 2. Instalar dependencias do frontend
 
-Copie `.env.example` para `.env` e preencha a variável:
+```powershell
+cd frontend
+npm install
+cd ..
+```
+
+## 3. Configurar a chave da Groq
+
+Copie `.env.example` para `.env` e preencha:
 
 ```dotenv
 GROQ_API_KEY=sua_chave_da_groq
@@ -17,20 +25,33 @@ GROQ_MODEL=llama-3.3-70b-versatile
 LANGCHAIN_VERBOSE=false
 ```
 
-## 3. Validar sintaxe
+## 4. Validar sintaxe do backend
 
 ```powershell
 python -m py_compile src\main.py src\__init__.py src\agent\__init__.py src\agent\executor.py
 ```
 
-## 4. Rodar a interface
+## 5. Subir a API
 
 ```powershell
-streamlit run src/main.py
+uvicorn src.main:app --reload
 ```
 
-Perguntas úteis com a base sintética em `data/sample/vendas.csv`:
+## 6. Subir o frontend React
+
+Em outro terminal:
+
+```powershell
+cd frontend
+npm run dev
+```
+
+## 7. Abrir a aplicacao
+
+Abra `http://localhost:5173`.
+
+Perguntas uteis com a base sintetica em `data/sample/vendas.csv`:
 
 - Quem vendeu mais Mouse no Nordeste?
 - Qual vendedor teve o maior volume total?
-- Qual a média de valor unitário dos produtos?
+- Qual produto teve a maior receita?
