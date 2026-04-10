@@ -170,7 +170,7 @@ In another terminal:
 
 ```powershell
 cd frontend
-npm run dev
+npm run dev 
 ```
 
 The frontend will be available at:
